@@ -1,0 +1,65 @@
+name: PCS Collector
+
+# 境外 runner（Azure 美国出口）抓取 PCS。
+# 注意：cron 用 UTC。'0 2 * * *' = 北京时间 10:00。
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:            # 允许手动触发验证
+    inputs:
+      mode:
+        description: 'check=只自检  collect=只采集出JSON  push=采集并推送境内'
+        type: choice
+        options: [check, collect, push]
+        default: collect
+      tasks:
+        description: '任务清单文件（相对 pcs-collector 目录）'
+        type: string
+        default: tasks.txt
+
+concurrency:
+  group: pcs-collector
+  cancel-in-progress: false     # 采集任务不要互相打断
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300        # 免费 runner 单 job 上限 6h，历史全量请按年份分批
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+
+      - name: 安装依赖
+        run: pip install -r pcs-collector/requirements.txt
+
+      - name: 出口自检（先看这里是不是境外）
+        working-directory: pcs-collector
+        run: python collect.py --check
+
+      - name: 采集
+        if: ${{ inputs.mode != 'check' }}
+        working-directory: pcs-collector
+        env:
+          INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+        run: |
+          EXTRA=""
+          if [ "${{ inputs.mode }}" = "push" ]; then
+            EXTRA="--push ${{ secrets.INGEST_URL }}"
+          fi
+          python collect.py \
+            --config "${{ inputs.tasks }}" \
+            --rps 0.8 \
+            --batch-size 10 \
+            --out collected.json $EXTRA
+
+      - name: 留存产物（下载后回境内入库）
+        if: ${{ inputs.mode != 'check' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: pcs-collected-${{ github.run_number }}
+          path: pcs-collector/collected.json
+          retention-days: 7

@@ -1,0 +1,257 @@
+[
+  {
+    "entity": "rider",
+    "slug": "rider/tadej-pogacar",
+    "source_url": "https://www.procyclingstats.com/rider/tadej-pogacar",
+    "profile": {
+      "name": "Tadej Pogačar",
+      "birthdate": "1998-9-21",
+      "height": 1.76,
+      "weight": 66.0,
+      "nationality": "SI",
+      "points_per_speciality": {
+        "one_day_races": 92,
+        "gc": 96,
+        "time_trial": 88,
+        "sprint": 70,
+        "climber": 94,
+        "hills": 90
+      }
+    },
+    "collected_at": "2026-10-24T12:00:00+0800"
+  },
+  {
+    "entity": "team",
+    "slug": "team/uae-team-emirates-xrg-2026",
+    "source_url": "https://www.procyclingstats.com/team/uae-team-emirates-xrg-2026",
+    "team": {
+      "name": "UAE Team Emirates - XRG",
+      "abbreviation": "UAD",
+      "status": "WT",
+      "bike": "Colnago",
+      "nationality": "AE",
+      "license_country": "AE",
+      "pcs_points": 12000,
+      "wins_count": 45,
+      "riders": [
+        {
+          "rider_name": "POGAČAR Tadej",
+          "rider_url": "rider/tadej-pogacar",
+          "nationality": "SI",
+          "age": 28
+        },
+        {
+          "rider_name": "VAN AERT Wout",
+          "rider_url": "rider/wout-van-aert",
+          "nationality": "BE",
+          "age": 32
+        }
+      ]
+    },
+    "collected_at": "2026-10-24T12:00:05+0800"
+  },
+  {
+    "entity": "race_deep",
+    "slug": "race/tour-de-france/2026",
+    "source_url": "https://www.procyclingstats.com/race/tour-de-france/2026",
+    "stage_count": 2,
+    "race": {
+      "name": "Tour de France",
+      "year": 2026,
+      "edition": 113,
+      "startdate": "2026-07-04",
+      "enddate": "2026-07-05",
+      "category": "Men Elite",
+      "uci_tour": "UCI Worldtour",
+      "nationality": "FR",
+      "is_one_day_race": false,
+      "stages": [
+        {
+          "stage_url": "race/tour-de-france/2026/stage-1",
+          "stage_name": "Stage 1 | Lille - Lille"
+        },
+        {
+          "stage_url": "race/tour-de-france/2026/stage-2",
+          "stage_name": "Stage 2 | Lauwin - Sanremo"
+        }
+      ]
+    },
+    "startlist": {
+      "startlist": [
+        {
+          "rider_name": "POGAČAR Tadej",
+          "rider_url": "rider/tadej-pogacar",
+          "rider_number": 11,
+          "team_name": "UAE Team Emirates - XRG",
+          "team_url": "team/uae-team-emirates-xrg-2026",
+          "nationality": "SI"
+        },
+        {
+          "rider_name": "VAN AERT Wout",
+          "rider_url": "rider/wout-van-aert",
+          "rider_number": 12,
+          "team_name": "UAE Team Emirates - XRG",
+          "team_url": "team/uae-team-emirates-xrg-2026",
+          "nationality": "BE"
+        }
+      ]
+    },
+    "stages": [
+      {
+        "entity": "stage",
+        "slug": "race/tour-de-france/2026/stage-1",
+        "source_url": "https://www.procyclingstats.com/race/tour-de-france/2026/stage-1",
+        "stage": {
+          "date": "2026-07-04",
+          "departure": "Lille",
+          "arrival": "Lille",
+          "distance": 184.5,
+          "vertical_meters": 1200,
+          "stage_type": "RR",
+          "profile_icon": "p1"
+        },
+        "results": [
+          {
+            "rank": 1,
+            "rider_name": "POGAČAR Tadej",
+            "rider_url": "rider/tadej-pogacar",
+            "rider_number": 11,
+            "team_name": "UAE Team Emirates - XRG",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "SI",
+            "status": "DF",
+            "time": "4:12:33",
+            "bonus": "0:10",
+            "pcs_points": 50,
+            "uci_points": 60
+          },
+          {
+            "rank": 2,
+            "rider_name": "VAN AERT Wout",
+            "rider_url": "rider/wout-van-aert",
+            "rider_number": 12,
+            "team_name": "UAE Team Emirates - XRG",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "BE",
+            "status": "DF",
+            "time": "4:12:45",
+            "pcs_points": 30,
+            "uci_points": 40
+          }
+        ],
+        "gc": [
+          {
+            "rank": 1,
+            "rider_name": "POGAČAR Tadej",
+            "rider_url": "rider/tadej-pogacar",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "SI",
+            "time": "4:12:33",
+            "pcs_points": 50
+          },
+          {
+            "rank": 2,
+            "rider_name": "VAN AERT Wout",
+            "rider_url": "rider/wout-van-aert",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "BE",
+            "time": "+ 0:12",
+            "pcs_points": 30
+          }
+        ],
+        "points": [
+          {
+            "rank": 1,
+            "rider_name": "POGAČAR Tadej",
+            "rider_url": "rider/tadej-pogacar",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "SI",
+            "pcs_points": 50
+          }
+        ],
+        "kom": [
+          {
+            "rank": 1,
+            "rider_name": "VAN AERT Wout",
+            "rider_url": "rider/wout-van-aert",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "BE",
+            "pcs_points": 20
+          }
+        ],
+        "youth": [
+          {
+            "rank": 1,
+            "rider_name": "POGAČAR Tadej",
+            "rider_url": "rider/tadej-pogacar",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "SI"
+          }
+        ]
+      },
+      {
+        "entity": "stage",
+        "slug": "race/tour-de-france/2026/stage-2",
+        "source_url": "https://www.procyclingstats.com/race/tour-de-france/2026/stage-2",
+        "stage": {
+          "date": "2026-07-05",
+          "departure": "Lauwin",
+          "arrival": "Sanremo",
+          "distance": 199.2,
+          "vertical_meters": 2100,
+          "stage_type": "RR",
+          "profile_icon": "p3"
+        },
+        "results": [
+          {
+            "rank": 1,
+            "rider_name": "VAN AERT Wout",
+            "rider_url": "rider/wout-van-aert",
+            "rider_number": 12,
+            "team_name": "UAE Team Emirates - XRG",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "BE",
+            "status": "DF",
+            "time": "4:45:10",
+            "pcs_points": 50,
+            "uci_points": 60
+          },
+          {
+            "rank": 2,
+            "rider_name": "POGAČAR Tadej",
+            "rider_url": "rider/tadej-pogacar",
+            "rider_number": 11,
+            "team_name": "UAE Team Emirates - XRG",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "SI",
+            "status": "DF",
+            "time": "4:45:10",
+            "pcs_points": 30,
+            "uci_points": 40
+          }
+        ],
+        "gc": [
+          {
+            "rank": 1,
+            "rider_name": "POGAČAR Tadej",
+            "rider_url": "rider/tadej-pogacar",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "SI",
+            "time": "8:57:43",
+            "pcs_points": 80
+          },
+          {
+            "rank": 2,
+            "rider_name": "VAN AERT Wout",
+            "rider_url": "rider/wout-van-aert",
+            "team_url": "team/uae-team-emirates-xrg-2026",
+            "nationality": "BE",
+            "time": "+ 0:12",
+            "pcs_points": 80
+          }
+        ]
+      }
+    ],
+    "collected_at": "2026-10-24T12:00:30+0800"
+  }
+]
