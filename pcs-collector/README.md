@@ -4,9 +4,16 @@
 
 ---
 
-## 一、先认清一件事：没有软件层面的绕过
+## 一、先认清一件事：拦截发生在两个独立维度
 
-PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
+想抓 PCS，必须**同时**通过两道门，缺一不可：
+
+| 维度 | 检查内容 | 失败表现 | 解法 |
+|---|---|---|---|
+| **① IP / ASN** | 国家地区 + 是否机房 IP | `403 Attention Required! \| Cloudflare` | **换出口 IP**：住宅代理 / 家宽 VPS |
+| **② TLS 指纹** | JA3/JA4 握手特征是否像浏览器 | 同上，但仅发生在境外出口 | **换传输层**：`curl_cffi` |
+
+**中国大陆出口两道都过不去**（实测：即便用 curl_cffi 完美伪装 Chrome131 指纹，仍 403），所以那段折腾是徒劳的：
 
 | 尝试 | 实测结果 |
 |---|---|
@@ -16,26 +23,50 @@ PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
 | Wayback / archive.org | 国内连接超时 |
 | allorigins / codetabs / corsproxy | 不通或 403 |
 
-**唯一解法是换出口 IP 的地理位置。** 所以本方案的本质是：
-> 代码在国内写、在国内调度，**执行落在境外**，结果**主动推回**境内。
+| `Python requests`（原生 OpenSSL 指纹） | 403 —— 已在 GitHub Actions（美国 Azure 出口）复现 |
+| `curl_cffi`（伪装 Chrome131 指纹） | 国内仍 403（IP 维度不过）；境外出口待验证 |
+
+> ⚠️ 修正一处旧结论：之前写「cloudscraper 返回 403 ⇒ 纯 IP 阻断 ⇒ 软件无解」，这个推论**不准确**——cloudscraper 底层仍是 requests/OpenSSL，指纹根本没换。准确说法是：**换 IP 解决维度①，换 curl_cffi 解决维度②，两条要叠加。**
+
+所以本方案的本质是：
+> 代码在国内写、在国内调度，**执行落在境外**，且**必须用浏览器 TLS 指纹**，结果**主动推回**境内。
 
 ---
 
-## 二、五条路径怎么选
+## 二、传输层：curl_cffi（2026-10 实测新增）
 
-| 方案 | 出口 | 成本 | 建议 |
+本采集器默认用 `curl_cffi` 发请求，并把 `procyclingstats` 内部的 Session 一并替换掉：
+
+```python
+# collect.py 内部逻辑，参照即可
+install_transport(impersonate="chrome131", proxy=None)
+```
+
+- `--transport auto|curl_cffi|requests`：默认 `auto`（有 curl_cffi 就用）
+- `--impersonate chrome131|safari18_0|chrome110`：指纹预设，被针对时轮换试试
+- `--proxy http://user:pass@host:port` 或设 `HTTPS_PROXY` 环境变量
+
+**别装 cloudscraper**：它被 `procyclingstats` 优先使用，但底层还是 requests，会覆盖本采集器注入的传输层。
+
+---
+
+## 三、五条出口怎么选
+
+| 方案 | 出口 | 成本 | 实测状态 |
 |---|---|---|---|
-| **GitHub Actions** | Azure 美国 | 免费（公开仓库不限额度） | ✅ **先用这个验证**，零成本、1 天能跑通 |
-| **境外 VPS** | 自选（新加坡/日本） | ¥30–50/月 | ✅ **生产主力**：专有 IP、可控速率、能跑全量历史 |
+| **GitHub Actions** | Azure 美国 | 免费 | ⚠️ 已实测：原生 requests 被 403。**curl_cffi 是否有效仍待验证**——若可通过，它就是零成本最优解 |
+| **住宅代理 + 任意出口** | 真实家庭宽带 ISP | ¥10–15/GB，本项目约 ¥1–3/月 | ✅ **最可能通过**，维度①②同时满足 |
+| **境外 VPS** | 自选（美国/德国/荷兰） | ¥30–50/月 | ❌ 机房 ASN，通常同样被 CF 按 IP 信誉拒；**不如住宅代理** |
 | Cloudflare Workers | CF 全球边缘 | 免费（10 万 req/天） | 轻量增量；`workers.dev` 国内不可达，只能推送不能拉取 |
-| Vercel / Netlify | 美国 | 免费额度 | 备选 |
-| 商业抓取 API（ScraperAPI / ZenRows / Apify） | 全球代理池 | 按量付费 | 不想运维时选，自带反爬绕过 |
+| 商业抓取 API（ScraperAPI / ZenRows / Apify） | 代理池 + 反爬 | 按量付费 | 不想运维时选，但成本高 |
 
-**推荐组合**：GitHub Actions 验证 → 境外 VPS 主力 + Actions 兜底（VPS 被封时仍出数据）。
+> ⚠️ 「境外 VPS」在早期文档里被当作主力推荐，**这个说法要改**：VPS 的 IP 属于机房 ASN（DigitalOcean/Hetzner/Vultr 等），Cloudflare 会按 IP 信誉整体标记，买了大概率照样 403。**机房 IP 换住宅 IP 是关键变量，不是换国家。**
+
+**推荐路径**：① 先在 Actions 上验证 curl_cffi 是否通（零成本）→ ② 不通则买住宅代理（先拿免费测试流量跑 `--check`）→ ③ 通过后再决定要不要配 ±30 元的家宽 VPS 长期跑。
 
 ---
 
-## 三、快速开始（GitHub Actions，零成本）
+## 四、快速开始（GitHub Actions，零成本）
 
 1. **Fork / 建仓库**，把本目录放进去。
 2. **境内先起好接收端**：
@@ -61,7 +92,35 @@ PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
 
 ---
 
-## 四、三个实测出来的坑
+## 五、排查阶梯：403 了怎么办
+
+按顺序做，每步都能排除一类原因：
+
+| 步骤 | 操作 | 通过意味着什么 | 不通过怎么办 |
+|---|---|---|---|
+| **1** | `python collect.py --check`（在目标出口跑） | 看【1】确认出口国家和 ISP | 若 ISP 含 Microsoft/Azure/AWS/DO/Hetzner → 机房 IP，下一步 |
+| **2** | 看【2】curl_cffi 是否成功 | TLS 指纹问题已解决（默认已换 curl_cffi） | 若三种指纹全 403 → 维度①不过，看下一步 |
+| **3** | 试 `--impersonate safari18_0` | 某些站位按浏览器版本封 | 仍 403 → 换 IP 类型 |
+| **4** | **住宅代理**：`--proxy http://user:pass@host:port` 后重跑 `--check` | IP/ASN 维度通过，可正式采集 | 仍 403 → 换代理商 / 换国家（优先美国、德国、荷兰） |
+| **5** | 家宽 VPS（非机房） | IP 归属为 ISP | 放弃 PCS，改用 UCI 官方 + cqranking 等境内可达源 |
+
+**排除法的关键判断**：同一个脚本，出口从「Azure 机房」换成「住宅宽带」后若通过，就证明之前是 IP/ASN 被封，与代码无关。
+
+### 住宅代理选型
+
+国内可买、支持境外住宅 IP 的服务商参考（2026 年公开报价，务必以官网实时价为准）：
+
+| 类型 | 参考价格 | 说明 |
+|---|---|---|
+| 动态住宅（按流量） | ¥10–15/GB 起 | **本项目推荐**。一个赛季约 2000 请求 ≈ 100 MB，月成本约 ¥1–3 |
+| 隧道代理（包月） | ¥100–500/月 含数 GB | 自动轮换 IP，适合批量 |
+| 静态住宅（按 IP） | ¥10–20/月/IP | 固定 IP，稳定性最好 |
+
+选购要点：① 要**按流量计费**的套餐，别买包月不限量（用不上）；② 国家选**美国 / 德国 / 荷兰**，别选香港、新加坡（和大陆常被同一批规则覆盖）；③ 先拿免费测试流量跑 `--check` 验证再付款。
+
+---
+
+## 六、三个实测出来的坑
 
 1. **`*.workers.dev` 在国内不可达**（连接超时）。用 Workers 就只能做「worker 主动 POST 到境内」，**不能**做「境内请求 worker URL」。
 2. **`raw.githubusercontent.com` 可达但很慢**（9.3s 才返回 301）。Actions 别靠「境内拉产物」回传，同样走推送。
@@ -71,7 +130,7 @@ PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
 
 ---
 
-## 五、架构：为什么是推送不是拉取
+## 七、架构：为什么是推送不是拉取
 
 ```
 境外（Actions / VPS / Workers）
@@ -87,7 +146,7 @@ PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
 
 ---
 
-## 六、合规（务必读）
+## 八、合规（务必读）
 
 读 PCS 的 `robots.txt` 后有个**关键区分**：
 
@@ -105,7 +164,7 @@ PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
 
 ---
 
-## 七、文件说明
+## 九、文件说明
 
 | 文件 | 用途 |
 |---|---|
@@ -120,7 +179,7 @@ PCS 对中国大陆 IP 是 **Cloudflare 的 IP 级阻断**，不是 JS 挑战。
 
 ---
 
-## 八、采集到入库的完整链路
+## 十、采集到入库的完整链路
 
 ```
 境外节点                                     境内
@@ -153,7 +212,7 @@ python parse_to_mysql.py --input batch.json
 
 ---
 
-## 九、采集顺序建议
+## 十一、采集顺序建议
 
 数据之间有依赖，按这个顺序跑最省事：
 
@@ -166,7 +225,7 @@ python parse_to_mysql.py --input batch.json
 
 ---
 
-## 十、请求量估算（@ 1 req/s）
+## 十二、请求量估算（@ 1 req/s）
 
 | 任务 | 请求数 | 耗时 |
 |---|---|---|

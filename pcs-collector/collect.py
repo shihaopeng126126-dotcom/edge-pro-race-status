@@ -49,13 +49,67 @@ import os
 import sys
 import time
 import random
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 import requests
+
+try:  # 浏览器 TLS 伪装（curl-impersonate）。装不上则退回 requests。
+    from curl_cffi.requests import Session as CffiSession
+    HAS_CFFI = True
+except ImportError:  # pragma: no cover
+    CffiSession = None  # type: ignore
+    HAS_CFFI = False
 
 BASE = "https://www.procyclingstats.com/"
 UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
+
+
+# --------------------------------------------------------------------------
+# 传输层：为什么必须有这一层
+# --------------------------------------------------------------------------
+# Cloudflare 会在「读到你写的 HTTP 头之前」先检查 TLS 握手指纹（JA3/JA4）。
+# Python requests 走 OpenSSL，指纹是公开的机器人特征值，极易被识别——
+# 哪怕出口 IP 在美国、UA 伪装成 Chrome，也可能直接吃 403。
+#
+# curl_cffi 是 curl-impersonate 的 Python 绑定，握手特征与真实 Chrome 逐字节一致。
+# 因此默认走 curl_cffi；只有在安装失败时才退回 requests。
+#
+# ┌──────────────────────────────────────────────────────────┐
+# │ 中国大陆出口无论换成什么传输层都必然 403（CF 按国家/地区封）│
+# │ → 那个场景下唯一的解法是换出口 IP，不是换传输层。          │
+# └──────────────────────────────────────────────────────────┘
+# --------------------------------------------------------------------------
+
+
+def build_cffi_session(impersonate: str = "chrome131",
+                       proxy: Optional[str] = None,
+                       timeout: int = 30):
+    """构造一个伪装成真实浏览器的 Session（供 collect.py 与解析包共用）。"""
+    kw: Dict[str, Any] = {"impersonate": impersonate, "timeout": timeout}
+    if proxy:
+        kw["proxies"] = {"http": proxy, "https": proxy}
+    return CffiSession(**kw)
+
+
+def install_transport(impersonate: str = "chrome131",
+                      proxy: Optional[str] = None):
+    """把 procyclingstats 内部的请求 Session 换成 curl_cffi Session。
+
+    该包默认用 requests；若装了 cloudscraper 则用它——但 cloudscraper 底层仍是
+    requests/OpenSSL，指纹没变，所以对这条链路无效。这里直接替换掉
+    Scraper._get_session，让所有解析请求都走浏览器指纹。
+    """
+    if not HAS_CFFI:
+        return None
+    try:
+        import procyclingstats.scraper as _ps
+    except Exception:  # noqa: BLE001
+        from procyclingstats import scraper as _ps  # type: ignore
+
+    sess = build_cffi_session(impersonate, proxy)
+    _ps.Scraper._get_session = classmethod(lambda cls, _s=sess: _s)  # type: ignore
+    return sess
 
 
 # --------------------------------------------------------------------------
@@ -76,20 +130,26 @@ class RateLimiter:
 LIMITER = RateLimiter(rps=1.0)
 
 
-def http_get(path: str, timeout: int = 30, retries: int = 3) -> str:
-    """带重试的 GET。返回 HTML 文本。"""
+def http_get(path: str, timeout: int = 30, retries: int = 3,
+             session: Any = None) -> str:
+    """带重试的 GET。返回 HTML 文本。
+
+    session 传入则用它（一般是 curl_cffi Session），否则退化为 requests。
+    """
     url = BASE + path.lstrip("/")
     last_err: Optional[Exception] = None
     for attempt in range(1, retries + 1):
         LIMITER.wait()
         try:
-            r = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
+            if session is not None:
+                r = session.get(url, timeout=timeout)
+            else:
+                r = requests.get(url, headers={"User-Agent": UA}, timeout=timeout)
             if r.status_code == 200:
                 return r.text
             if r.status_code == 403:
                 raise RuntimeError(
-                    "403 —— 当前出口 IP 被 Cloudflare 阻断。"
-                    "请确认脚本运行在境外节点（GitHub Actions / 境外 VPS / Workers）。"
+                    "403 —— 请求被 Cloudflare 拦截。"
                 )
             last_err = RuntimeError(f"HTTP {r.status_code}")
         except RuntimeError:
@@ -100,29 +160,98 @@ def http_get(path: str, timeout: int = 30, retries: int = 3) -> str:
     raise RuntimeError(f"请求失败 {url}: {last_err}")
 
 
+def probe(label: str, session: Any = None, proxy: Optional[str] = None) -> Tuple[bool, str]:
+    """试一次抓 PCS，返回 (是否成功, 说明)。"""
+    import re
+    try:
+        html = http_get("rider/tadej-pogacar", retries=1, session=session)
+    except RuntimeError as e:
+        return False, str(e)
+    except Exception as e:  # noqa: BLE001
+        return False, f"{type(e).__name__}: {str(e)[:60]}"
+
+    if "Attention Required" in html or "cf-browser-verification" in html:
+        return False, "403 Firefox 规则拦截页（Attention Required）"
+    if "Just a moment" in html:
+        return False, "JS 挑战页（传输层无法解决）"
+    ok = "Poga" in html or "poga" in html
+    if ok:
+        return True, f"✅ 成功 ({len(html)} bytes)"
+    return False, f"返回 200 但内容异常 ({len(html)} bytes)"
+
+
 def check_exit() -> int:
-    """出口自检：确认当前网络位置能否访问 PCS。"""
-    print("正在自检出口 IP ...")
+    """出口自检：逐层试出能通的通道，并给出明确结论。"""
+    proxy = os.environ.get("HTTPS_PROXY") or os.environ.get("https_proxy") or ""
+
+    print("=" * 62)
+    print("PCS 出口诊断")
+    print("=" * 62)
+
+    # --- 1) 先看自己人在哪 ---
+    print("\n【1】出口 IP")
     try:
         ip = requests.get("https://api.ipify.org", timeout=15).text.strip()
         geo = requests.get(
-            "http://ip-api.com/json/?fields=status,country,regionName,isp,query",
+            "http://ip-api.com/json/?fields=status,country,regionName,isp,as,query",
             timeout=15,
         ).json()
-        print(f"  出口 IP : {ip}")
+        print(f"  IP      : {ip}")
         print(f"  归属地  : {geo.get('country')} / {geo.get('regionName')}")
-        print(f"  ISP     : {geo.get('isp')}")
+        print(f"  ISP/ASN : {geo.get('isp')} | {geo.get('as')}")
+        if geo.get("country") == "China":
+            print("  ⚠️ 中国大陆出口：必然被拦，唯一解法是换境外出口（后面不用再试）")
     except Exception as e:  # noqa: BLE001
-        print(f"  出口信息获取失败（不影响后续）: {e}")
+        print(f"  获取失败（不影响后续）: {e}")
 
-    try:
-        html = http_get("rider/tadej-pogacar", retries=1)
-        ok = "Poga" in html or "poga" in html
-        print(f"  PCS 抓取: {'✅ 成功' if ok else '⚠️ 返回但内容异常'} ({len(html)} bytes)")
-        return 0 if ok else 1
-    except RuntimeError as e:
-        print(f"  PCS 抓取: ❌ {e}")
-        return 2
+    # --- 2) 逐传输层探测 ---
+    print("\n【2】逐层探测（请求 https://www.procyclingstats.com/rider/tadej-pogacar）")
+    winners: List[str] = []
+    results: List[Tuple[str, bool, str]] = []
+
+    candidates: List[Tuple[str, Any]] = []
+    if HAS_CFFI:
+        candidates.append(("curl_cffi · Chrome131 指纹", build_cffi_session("chrome131")))
+        candidates.append(("curl_cffi · Safari 指纹", build_cffi_session("safari18_0")))
+    candidates.append(("requests · 原生 OpenSSL 指纹", None))
+
+    if proxy and HAS_CFFI:
+        print(f"  （检测到代理 {proxy}，额外增加一组代理测试）")
+        candidates.append(("curl_cffi · Chrome + 代理",
+                           build_cffi_session("chrome131", proxy)))
+
+    for label, sess in candidates:
+        LIMITER.wait()
+        ok, note = probe(label, session=sess)
+        results.append((label, ok, note))
+        print(f"  {label:<34} → {note}")
+        if ok:
+            winners.append(label)
+
+    # --- 3) 结论 ---
+    print("\n【3】结论")
+    if winners:
+        print(f"  ✅ 可用通道：{winners[0]}")
+        if "代理" in winners[0]:
+            print("      → 设置 HTTPS_PROXY 即可正常采集")
+        elif HAS_CFFI and winners[0].startswith("curl_cffi"):
+            print("      → 运行时加上 --transport curl_cffi 即可正常采集")
+        else:
+            print("      → requests 可直接用，无需额外配置")
+        print("      若下面的 RPC 检查仍失败，请把完整输出发我。")
+        return 0
+
+    print("  ❌ 所有传输层均被拦，说明 Cloudflare 按 IP/ASN 封禁了当前出口。")
+    print("     这不是代码问题——换 LIBRARY 没用，必须换 IP 类型：")
+    print("       ① 住宅代理（推荐）：本机/environment 设 HTTPS_PROXY=...")
+    print("          PCS 显式禁止中国大陆以外的住宅 IP 通常可通过；成本约 ¥1-3/GB，")
+    print("          一个赛季约 2000 请求 ≈ 100MB，月成本可忽略。")
+    print("       ② 家用宽带 VPS / IPv6 家宽：IP 归属为 ISP 而非机房")
+    print("       ③ 放弃 PCS，改用 UCI 官方等境内可达数据源")
+    print("\n  附：各层返回明细")
+    for label, ok, note in results:
+        print(f"     - {label}: {note}")
+    return 2
 
 
 # --------------------------------------------------------------------------
@@ -341,10 +470,26 @@ def main() -> int:
     ap.add_argument("--secret", default=os.environ.get("INGEST_SECRET", ""))
     ap.add_argument("--rps", type=float, default=1.0, help="每秒请求数，默认 1（请保持克制）")
     ap.add_argument("--batch-size", type=int, default=10, help="每批推送条数")
+    ap.add_argument("--transport", choices=["auto", "curl_cffi", "requests"],
+                    default="auto", help="HTTP 传输层，默认 auto（优先 curl_cffi 浏览器指纹）")
+    ap.add_argument("--impersonate", default="chrome131",
+                    help="curl_cffi 浏览器指纹预设，如 chrome131 / safari18_0 / chrome110")
+    ap.add_argument("--proxy", default=(os.environ.get("HTTPS_PROXY") or
+                                        os.environ.get("https_proxy") or ""),
+                    help="HTTP(S) 代理 URL，住宅代理填这里，如 http://user:pass@host:port")
     args = ap.parse_args()
 
     global LIMITER
     LIMITER = RateLimiter(rps=args.rps)
+
+    # 安装传输层：让解析包与自检共用同一个浏览器指纹 Session
+    use_cffi = args.transport == "curl_cffi" or (args.transport == "auto" and HAS_CFFI)
+    if use_cffi and HAS_CFFI:
+        install_transport(args.impersonate, args.proxy or None)
+        print(f"[传输层] curl_cffi ({args.impersonate})"
+              + (f" + 代理 {args.proxy}" if args.proxy else ""))
+    else:
+        print("[传输层] requests（指纹易被识别，仅建议在已验证可用的环境使用）")
 
     if args.check:
         return check_exit()

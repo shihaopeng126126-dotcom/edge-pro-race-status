@@ -21,12 +21,12 @@
 export default {
   async scheduled(event, env, ctx) {
     const targets = (env.TARGETS || 'race/tour-de-france/2026,rider/tadej-pogacar')
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
+        .split(',')
+        .map(s => s.trim())
+        .filter(Boolean);
 
     const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-             + '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
+        + '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
     const items = [];
     for (const path of targets) {
@@ -64,8 +64,8 @@ async function push(env, items) {
   const ts = String(Math.floor(Date.now() / 1000));
 
   const key = await crypto.subtle.importKey(
-    'raw', new TextEncoder().encode(env.INGEST_SECRET),
-    { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
+      'raw', new TextEncoder().encode(env.INGEST_SECRET),
+      { name: 'HMAC', hash: 'SHA-256' }, false, ['sign'],
   );
   const sigBuf = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(ts + body));
   const sig = [...new Uint8Array(sigBuf)].map(b => b.toString(16).padStart(2, '0')).join('');

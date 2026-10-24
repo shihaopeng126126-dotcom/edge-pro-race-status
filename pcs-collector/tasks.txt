@@ -1,41 +1,37 @@
-# 每行一条：任务类型  slug
-# 任务类型：race-deep（赛事全量含成绩）/ race（仅赛事+出发名单）/ rider / team / stage
-# slug 去掉域名前缀，形如 race/tour-de-france/2026
+每行一条：任务类型 slug
+任务类型：race-deep（赛事全量含成绩）/ race（仅赛事+出发名单）/ rider / team / stage
+slug 去掉域名前缀，形如 race/tour-de-france/2026
+============================================================
+第 1 批：先用 1 场赛事验证链路跑得通（约 25 秒）
+============================================================
+race-deep race/tour-de-france/2026
 
-# ============================================================
-# 第 1 批：先用 1 场赛事验证链路跑得通（约 25 秒）
-# ============================================================
-race-deep  race/tour-de-france/2026
-
-# ============================================================
-# 第 2 批：验证通过后，扩到三大环赛（约 1.5 分钟）
-# ============================================================
-# race-deep  race/giro-d-italia/2026
-# race-deep  race/vuelta-a-espana/2026
-
-# ============================================================
-# 第 3 批：五大古典赛
-# ============================================================
-# race-deep  race/milano-sanremo/2026
-# race-deep  race/ronde-van-vlaanderen/2026
-# race-deep  race/paris-roubaix/2026
-# race-deep  race/liege-bastogne-liege/2026
-# race-deep  race/il-lombardia/2026
-
-# ============================================================
-# 第 4 批：车队赛季（补车队、阵容、合同）
-# 注意：车队 slug 必须带赛季，如 -2026
-# ============================================================
-# team   team/uae-team-emirates-xrg-2026
-# team   team/team-visma-lease-a-bike-2026
-# team   team/soudal-quick-step-2026
-
-# ============================================================
-# 第 5 批：车手详情（补全生日/身高/六维能力值）
-# 每个车手 2 个请求，最耗时，最后跑
-# ============================================================
-# rider  rider/tadej-pogacar
-# rider  rider/jonas-vingegaard
-# rider  rider/remco-evenepoel
-# rider  rider/mathieu-van-der-poel
-# rider  rider/wout-van-aert
+============================================================
+第 2 批：验证通过后，扩到三大环赛（约 1.5 分钟）
+============================================================
+race-deep race/giro-d-italia/2026
+race-deep race/vuelta-a-espana/2026
+============================================================
+第 3 批：五大古典赛
+============================================================
+race-deep race/milano-sanremo/2026
+race-deep race/ronde-van-vlaanderen/2026
+race-deep race/paris-roubaix/2026
+race-deep race/liege-bastogne-liege/2026
+race-deep race/il-lombardia/2026
+============================================================
+第 4 批：车队赛季（补车队、阵容、合同）
+注意：车队 slug 必须带赛季，如 -2026
+============================================================
+team team/uae-team-emirates-xrg-2026
+team team/team-visma-lease-a-bike-2026
+team team/soudal-quick-step-2026
+============================================================
+第 5 批：车手详情（补全生日/身高/六维能力值）
+每个车手 2 个请求，最耗时，最后跑
+============================================================
+rider rider/tadej-pogacar
+rider rider/jonas-vingegaard
+rider rider/remco-evenepoel
+rider rider/mathieu-van-der-poel
+rider rider/wout-van-aert
